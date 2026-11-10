@@ -162,13 +162,18 @@ async function saveTargets() {
 async function uploadFile() {
     const input = $("imgUploader");
     if (!input.files.length) return;
-    showLoading("Reading screenshot with local OCR...");
+    showLoading(`Reading ${input.files.length} screenshot${input.files.length === 1 ? "" : "s"} with local OCR...`);
     try {
-        const form = new FormData(); form.append("image",input.files[0]);
+        const form = new FormData();
+        Array.from(input.files).forEach(file => form.append("image", file));
         const result = await api("/api/upload","POST",form);
-        alert(`Screenshot processed.\nDetected: ${result.detectedCount}\nAdded: ${result.addedCount}\nDuplicates skipped: ${result.duplicateCount}`);
+        const failures = (result.imageResults || [])
+            .filter(image => image.error)
+            .map(image => `${image.filename}: ${image.error}`);
+        const summary = `${result.imageResults.length} images processed.\nDetected: ${result.detectedCount}\nAdded: ${result.addedCount}\nDuplicates skipped: ${result.duplicateCount}`;
+        alert(failures.length ? `${summary}\n\nSome images could not be processed:\n${failures.join("\n")}` : summary);
         input.value = "";
         await loadData();
-    } catch(e) { alert("Screenshot processing failed: "+e.message); input.value=""; }
+    } catch(e) { alert("Image processing failed: "+e.message); input.value=""; }
     finally { hideLoading(); }
 }
