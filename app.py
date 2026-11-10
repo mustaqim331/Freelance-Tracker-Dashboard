@@ -5,12 +5,15 @@ from sqlalchemy.exc import IntegrityError
 from database import db, Recording, Setting, Task, initialize_database, get_settings
 from ocr_parser import parse_screenshot
 
+MAX_IMAGE_SIZE = 15 * 1024 * 1024
+MAX_UPLOAD_SIZE = 60 * 1024 * 1024
+
 app = Flask(__name__, instance_relative_config=True)
 os.makedirs(app.instance_path, exist_ok=True)
 app.config.update(
     SQLALCHEMY_DATABASE_URI="sqlite:///" + os.path.join(app.instance_path, "dashboard.db"),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
-    MAX_CONTENT_LENGTH=15 * 1024 * 1024,
+    MAX_CONTENT_LENGTH=MAX_UPLOAD_SIZE,
 )
 db.init_app(app)
 
@@ -19,7 +22,7 @@ with app.app_context():
 
 @app.errorhandler(413)
 def too_large(_error):
-    return jsonify({"error": "Image is too large. Maximum upload size is 15 MB."}), 413
+    return jsonify({"error": "The total upload size cannot exceed 60 MB."}), 413
 
 @app.route("/")
 def index():
@@ -119,37 +122,84 @@ def save_settings():
 
 @app.post("/api/upload")
 def upload_screenshot():
-    image = request.files.get("image")
-    if not image or not image.filename:
+    images = [image for image in request.files.getlist("image") if image.filename]
+    if not images:
         return jsonify({"error": "Please select an image to upload."}), 400
-    if image.mimetype not in {"image/jpeg", "image/png", "image/webp"}:
-        return jsonify({"error": "Only JPG, PNG and WEBP images are supported."}), 400
 
     try:
-        extracted = parse_screenshot(image.read())
-        if not extracted:
-            return jsonify({
-                "error": "No complete recording rows were detected. "
-                         "Try a clearer screenshot or check the OCR configuration."
-            }), 422
-
+        image_results = []
+        records = []
         added = 0
         duplicates = 0
-        for rec in extracted:
-            if Recording.query.filter_by(record_id=rec["record_id"]).first():
-                duplicates += 1
+        seen_record_ids = set()
+
+        for image in images:
+            result = {
+                "filename": image.filename, "detectedCount": 0,
+                "addedCount": 0, "duplicateCount": 0,
+            }
+            image_results.append(result)
+
+            if image.mimetype not in {"image/jpeg", "image/png", "image/webp"}:
+                result["error"] = "Only JPG, PNG and WEBP images are supported."
                 continue
-            db.session.add(Recording(
-                record_id=rec["record_id"], date=rec["date"],
-                time=rec["time"], location=rec["location"],
-                duration_seconds=rec["duration_seconds"],
-                duration_formatted=rec["duration_formatted"], rate=20.0
-            ))
-            added += 1
-        db.session.commit()
+
+            image_bytes = image.stream.read(MAX_IMAGE_SIZE + 1)
+            if len(image_bytes) > MAX_IMAGE_SIZE:
+                result["error"] = "Image exceeds the 15 MB per-image limit."
+                continue
+
+            try:
+                extracted = parse_screenshot(image_bytes)
+            except ValueError as exc:
+                result["error"] = str(exc)
+                continue
+            except Exception:
+                app.logger.exception("Screenshot processing failed for %s", image.filename)
+                result["error"] = "OCR processing failed. Check that Tesseract is installed and configured."
+                continue
+
+            result["detectedCount"] = len(extracted)
+            records.extend(extracted)
+            if not extracted:
+                result["error"] = (
+                    "No complete recording rows were detected. Try a clearer screenshot "
+                    "or check the OCR configuration."
+                )
+                continue
+
+            for rec in extracted:
+                record_id = rec["record_id"]
+                if record_id in seen_record_ids or Recording.query.filter_by(record_id=record_id).first():
+                    result["duplicateCount"] += 1
+                    duplicates += 1
+                    continue
+                seen_record_ids.add(record_id)
+                db.session.add(Recording(
+                    record_id=record_id, date=rec["date"],
+                    time=rec["time"], location=rec["location"],
+                    duration_seconds=rec["duration_seconds"],
+                    duration_formatted=rec["duration_formatted"], rate=20.0
+                ))
+                result["addedCount"] += 1
+                added += 1
+
+        failures = [
+            f'{result["filename"]}: {result["error"]}'
+            for result in image_results if "error" in result
+        ]
+        if not any(result["detectedCount"] for result in image_results):
+            return jsonify({
+                "error": "No images could be processed. " + " ".join(failures),
+                "imageResults": image_results,
+            }), 422
+
+        if added:
+            db.session.commit()
         return jsonify({
             "addedCount": added, "duplicateCount": duplicates,
-            "detectedCount": len(extracted), "records": extracted
+            "detectedCount": len(records), "records": records,
+            "imageResults": image_results,
         })
     except Exception as exc:
         db.session.rollback()
