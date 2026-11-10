@@ -8,7 +8,8 @@ It does not use Gemini, Google Apps Script, Google Sheets, or any vision API.
 - Earnings and hours dashboard with weekly, monthly, and daily targets
 - Daily recording breakdown and Chart.js visualisations
 - Task/timetable planner and task status toggling
-- Screenshot upload using local Tesseract OCR + OpenCV
+- Multiple screenshot upload using local Tesseract OCR + OpenCV
+- Per-image results with partial success when an image cannot be processed
 - Duplicate recording detection by recording ID
 - SQLite persistence in `instance/dashboard.db`
 
@@ -65,6 +66,8 @@ Open http://127.0.0.1:5000
 
 ## Screenshot OCR notes
 
+Select multiple screenshots in the upload field to process them together. Each
+image can be up to 15 MB, with a 60 MB maximum for a single upload request.
 OCR is local and free, but unlike a vision-language model it recognises text;
 it does not understand arbitrary screen layouts. The parser currently expects
 each recording's timestamp/ID, room name, and duration to appear on the same
@@ -92,7 +95,7 @@ intend to reset the database.
 - `GET /api/ping`
 - `GET /api/dashboard`
 - `POST /api/settings`
-- `POST /api/upload` (multipart field: `image`)
+- `POST /api/upload` (multipart field: `image`, repeated for each image)
 - `GET /api/tasks`
 - `POST /api/tasks`
 - `POST /api/tasks/<id>/toggle`
