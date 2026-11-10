@@ -113,8 +113,9 @@
     </div>
     <div class="col-12 col-md-4">
       <div class="card p-3 text-center">
-        <div class="text-muted small">Upload Screenshot</div>
-        <input type="file" id="imgUploader" accept="image/*" class="form-control form-control-sm mt-1" onchange="uploadFile()">
+        <div class="text-muted small">Upload Screenshots</div>
+        <input type="file" id="imgUploader" accept="image/jpeg,image/png,image/webp" multiple class="form-control form-control-sm mt-1" onchange="uploadFile()">
+        <div class="form-text">Select multiple JPG, PNG, or WEBP images (15 MB each).</div>
       </div>
     </div>
   </div>
