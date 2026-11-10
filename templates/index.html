@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+  <style>
+    body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .card { border-radius: 12px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .stat-val { font-size: 1.6rem; font-weight: 700; color: #2c3e50; }
+    .chart-container { position: relative; height: 240px; width: 100%; min-width: 250px; }
+    .accordion-button:not(.collapsed) { background-color: #e8f4ff; color: #0d6efd; }
+    
+    /* Fullscreen Loading Overlay */
+    #loadingOverlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.85); z-index: 9999;
+      display: none; flex-direction: column; justify-content: center; align-items: center;
+    }
+
+    @media (max-width: 768px) {
+      .container { padding-left: 12px; padding-right: 12px; }
+      h2 { font-size: 1.4rem; }
+      h4 { font-size: 1.2rem; }
+      .stat-val { font-size: 1.4rem; }
+      .chart-container { height: 220px; }
+      .mobile-scroll-x { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay">
+  <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
+  <h5 id="loadingText" class="fw-bold text-dark">Processing Screenshot...</h5>
+  <p class="text-muted small">Please wait while local OCR extracts your records.</p>
+</div>
+
+<div class="container py-3 py-md-4">
+  
+  <!-- Header & Settings -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 mb-md-4 gap-2">
+    <h2 class="m-0">📊 Freelance Dashboard</h2>
+    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#targetModal">⚙️ Set Targets</button>
+  </div>
+
+  <!-- TODAY'S FOCUS SECTION -->
+  <div class="card p-3 p-md-4 mb-3 mb-md-4 border-3 bg-white" id="todayFocusCard">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+      <h4 class="fw-bold m-0" id="todayHeading">🔴 Today's Focus & Progress (<span id="currentDateLabel"></span>)</h4>
+      <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#taskModal">+ Add Task</button>
+    </div>
+    
+    <div class="row g-2 g-md-3 mb-3">
+      <div class="col-6 col-md-3">
+        <div class="p-2 p-md-3 bg-light rounded text-center">
+          <div class="text-muted small">Today's Earnings</div>
+          <div class="stat-val text-success" id="lblTodayEarnings">RM 0.00</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="p-2 p-md-3 bg-light rounded text-center">
+          <div class="text-muted small">Hours / Target</div>
+          <div class="stat-val" id="lblTodayHours">0.00 / 0.00</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="p-2 p-md-3 bg-light rounded text-center">
+          <div class="text-muted small" id="lblRemainingLabel">Remaining</div>
+          <div class="stat-val text-warning" id="lblTodayRemaining">0.00</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="p-2 p-md-3 bg-light rounded text-center">
+          <div class="text-muted small">Days Left This Week</div>
+          <div class="stat-val text-info" id="lblDaysLeft">0</div>
+        </div>
+      </div>
+    </div>
+
+    <h6 class="text-muted mb-2">Tasks & Chores Scheduled for Today:</h6>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0 text-nowrap">
+        <thead class="table-light">
+          <tr>
+            <th>Task / Chore</th>
+            <th>Category</th>
+            <th>Est. Hours</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="todayTaskTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Key Metrics Row -->
+  <div class="row g-2 g-md-3 mb-3 mb-md-4">
+    <div class="col-6 col-md-4">
+      <div class="card p-3 text-center">
+        <div class="text-muted small">Monthly Earnings</div>
+        <div class="stat-val text-success" id="lblTotalEarnings">RM 0.00</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card p-3 text-center">
+        <div class="text-muted small">Monthly Hours</div>
+        <div class="stat-val text-primary" id="lblTotalHours">0.00 hrs</div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card p-3 text-center">
+        <div class="text-muted small">Upload Screenshot</div>
+        <input type="file" id="imgUploader" accept="image/*" class="form-control form-control-sm mt-1" onchange="uploadFile()">
+      </div>
+    </div>
+  </div>
+
+  <!-- Donut Charts Row -->
+  <div class="row g-3 mb-3 mb-md-4">
+    <div class="col-12 col-md-4">
+      <div class="card p-3">
+        <h6 class="text-center mb-2">Strict 7-Day Weekly Target (RM)</h6>
+        <div class="chart-container"><canvas id="weeklyChart"></canvas></div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card p-3">
+        <h6 class="text-center mb-2">Monthly Earnings Target (RM)</h6>
+        <div class="chart-container"><canvas id="earningsChart"></canvas></div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card p-3">
+        <h6 class="text-center mb-2">Monthly Hours Target (Hrs)</h6>
+        <div class="chart-container"><canvas id="hoursChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily Bar Chart Trend -->
+  <div class="card p-3 p-md-4 mb-3 mb-md-4">
+    <h5 class="mb-3">📈 Daily Hours Trend</h5>
+    <div class="mobile-scroll-x">
+      <div class="chart-container" style="height: 220px; min-width: 500px;">
+        <canvas id="dailyTrendChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full Chores & Timetable Planner Section -->
+  <div class="card p-3 p-md-4 mb-3 mb-md-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="m-0">📝 All Chores & Timetable</h5>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle text-nowrap">
+        <thead class="table-light">
+          <tr>
+            <th>Task / Chore</th>
+            <th>Category</th>
+            <th>Date</th>
+            <th>Est. Hours</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="taskTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Timeline Breakdown Accordion -->
+  <div class="card p-3 p-md-4">
+    <h5 class="mb-3">Detailed Daily Breakdown</h5>
+    <div class="accordion" id="accordionDaily"></div>
+  </div>
+</div>
+
+<!-- Targets Modal -->
+<div class="modal fade" id="targetModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Adjust Milestone Targets</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-3"><label class="form-label">Daily Hours Target (Hours)</label><input type="number" step="0.5" id="txtDailyHours" class="form-control" value="3.0"></div>
+        <div class="mb-3"><label class="form-label">Weekly Earnings Target (RM)</label><input type="number" id="txtWeeklyEarn" class="form-control" value="300"></div>
+        <div class="mb-3"><label class="form-label">Monthly Earnings Target (RM)</label><input type="number" id="txtMonthlyEarn" class="form-control" value="3000"></div>
+        <div class="mb-3"><label class="form-label">Monthly Hours Target (Hours)</label><input type="number" id="txtMonthlyHours" class="form-control" value="150"></div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-primary w-100" onclick="saveTargets()">Save Changes</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Task Modal -->
+<div class="modal fade" id="taskModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Add New Task or Chore</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-3"><label class="form-label">Task Name</label><input type="text" id="newTaskName" class="form-control" placeholder="e.g., Grocery Shopping"></div>
+        <div class="mb-3"><label class="form-label">Category</label><select id="newTaskCat" class="form-select"><option value="Work">Work</option><option value="Chores">Chores</option><option value="Study">Study</option></select></div>
+        <div class="mb-3"><label class="form-label">Date</label><input type="date" id="newTaskDate" class="form-control"></div>
+        <div class="mb-3"><label class="form-label">Estimated Hours</label><input type="number" step="0.5" id="newTaskHours" class="form-control" value="1.0"></div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-success w-100" onclick="addNewTask()">Save Task</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>
